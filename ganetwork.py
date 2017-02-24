@@ -41,7 +41,6 @@ class GAN:
         return g_loss
     
     def _compile_networks(self):
-        self.generator.compile(loss='binary_crossentropy', optimizer="SGD")
         self.discriminator_on_generator_.compile(loss='binary_crossentropy', optimizer=self.g_optim)
         self.discriminator.trainable = True
         self.discriminator.compile(loss='binary_crossentropy', optimizer=self.d_optim)

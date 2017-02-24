@@ -16,7 +16,6 @@ class GAN:
     def _create_adversarial_model(self):
         self.discriminator_on_generator_ = Sequential()
         self.discriminator_on_generator_.add(self.generator)
-        self.discriminator.trainable = False
         self.discriminator_on_generator_.add(self.discriminator)
         
     def _sample_noise(self, batch_size):
@@ -27,7 +26,6 @@ class GAN:
         return X[batch_index * batch_size:(batch_index + 1) * batch_size]
         
     def _train_discriminator(self, X, batch_size, batch_index):
-        self.discriminator.trainable = True
         X_batch_data = GAN._sample_data(X, batch_size, batch_index)
         X_batch_generated = self.generator.predict(self._sample_noise(batch_size))
         X_discriminator = np.concatenate((X_batch_data, X_batch_generated))
@@ -36,11 +34,11 @@ class GAN:
         return d_loss
         
     def _train_discriminator_on_generator(self, batch_size):
-        self.discriminator.trainable = False
         g_loss = self.discriminator_on_generator_.train_on_batch(self._sample_noise(batch_size), [1] * batch_size)
         return g_loss
     
     def _compile_networks(self):
+        self.discriminator.trainable = False
         self.discriminator_on_generator_.compile(loss='binary_crossentropy', optimizer=self.g_optim)
         self.discriminator.trainable = True
         self.discriminator.compile(loss='binary_crossentropy', optimizer=self.d_optim)

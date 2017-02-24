@@ -13,7 +13,7 @@ class GAN:
         self.d_optim = d_optim
         self.g_optim = g_optim
         
-    def _generator_containing_discriminator(self):
+    def _create_adversarial_model(self):
         self.discriminator_on_generator_ = Sequential()
         self.discriminator_on_generator_.add(self.generator)
         self.discriminator.trainable = False
@@ -48,7 +48,7 @@ class GAN:
     
     def train(self, X, nb_epoch, batch_size, verbose=2):
         num_batches = int(X.shape[0] / batch_size)
-        self._generator_containing_discriminator()
+        self._create_adversarial_model()
         self._compile_networks()
         for epoch in range(nb_epoch):
             for batch_index in range(num_batches):

@@ -5,7 +5,7 @@ import numpy as np
 
 class GAN:
     
-    OPTIMIZER = Adam
+    OPTIMIZER = Adam()
     
     def __init__(self, generator, discriminator, d_optim=OPTIMIZER, g_optim=OPTIMIZER):
         self.generator = generator

@@ -1,11 +1,11 @@
 from keras.models import Sequential
-from keras.optimizers import SGD
+from keras.optimizers import Adam
 import numpy as np
 
 
 class GAN:
     
-    OPTIMIZER = SGD(lr=0.0005, momentum=0.9, nesterov=True)
+    OPTIMIZER = Adam
     
     def __init__(self, generator, discriminator, d_optim=OPTIMIZER, g_optim=OPTIMIZER):
         self.generator = generator

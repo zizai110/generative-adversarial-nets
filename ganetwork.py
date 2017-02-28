@@ -23,7 +23,7 @@ class GAN:
         self.discriminator.trainable = False
         self.full_model.compile(loss='binary_crossentropy', optimizer=self.g_optim)
         
-    def _sample_noise(self, batch_size):
+    def _sample_generator_data(self, batch_size):
         return np.random.uniform(-1, 1, (batch_size, self.generator.get_input_shape_at(0)[1]))
 
     def _sample_discriminator_data(self, X, batch_size, batch_index):
@@ -39,11 +39,11 @@ class GAN:
         for epoch in range(nb_epoch):
             for batch_index in range(num_batches):
                 d_loss = self.discriminator.train_on_batch(*self._sample_discriminator_data(X, batch_size, batch_index))
-                g_loss = self.full_model.train_on_batch(self._sample_noise(batch_size), [1] * batch_size)
+                g_loss = self.full_model.train_on_batch(self._sample_generator_data(batch_size), [1] * batch_size)
                 if verbose == 2:
                     print('Epoch %d, Batch %d, d_loss: %f, g_loss: %f' % (epoch, batch_index, d_loss, g_loss))    
             if verbose == 1:
                 print('Epoch %d, d_loss: %f, g_loss: %f' % (epoch, d_loss, g_loss))
     
     def generate(self, n_samples):
-        return self.generator.predict(self._sample_noise(n_samples))
+        return self.generator.predict(self._sample_generator_data(n_samples))

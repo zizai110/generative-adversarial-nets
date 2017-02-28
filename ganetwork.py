@@ -26,7 +26,7 @@ class GAN:
     def _sample_noise(self, batch_size):
         return np.random.uniform(-1, 1, (batch_size, self.generator.get_input_shape_at(0)[1]))
 
-    def _sample_discriminator_training_data(self, X, batch_size, batch_index):
+    def _sample_discriminator_data(self, X, batch_size, batch_index):
         X_batch = X[batch_index * batch_size:(batch_index + 1) * batch_size]
         Z_batch = self.generator.predict(self._sample_noise(batch_size))
         X_discriminator = np.concatenate((X_batch, Z_batch))
@@ -38,7 +38,7 @@ class GAN:
         self._prepare_adversarial_models()
         for epoch in range(nb_epoch):
             for batch_index in range(num_batches):
-                d_loss = self.discriminator.train_on_batch(*self._sample_discriminator_training_data(X, batch_size, batch_index))
+                d_loss = self.discriminator.train_on_batch(*self._sample_discriminator_data(X, batch_size, batch_index))
                 g_loss = self.full_model.train_on_batch(self._sample_noise(batch_size), [1] * batch_size)
                 if verbose == 2:
                     print('Epoch %d, Batch %d, d_loss: %f, g_loss: %f' % (epoch, batch_index, d_loss, g_loss))    

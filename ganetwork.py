@@ -4,11 +4,10 @@ from keras.optimizers import Adam
 import numpy as np
 
 
+class BaseGAN(metaclass=ABCMeta):
 
-class GAN:
-    
     OPTIMIZER = Adam()
-    
+
     def __init__(self, generator, discriminator, d_optim=OPTIMIZER, g_optim=OPTIMIZER):
         self.generator = generator
         self.discriminator = discriminator
@@ -31,6 +30,17 @@ class GAN:
     def _sample_discriminator_data(self, X, n_samples):
         Z = self.generator.predict(self._sample_generator_data(n_samples))
         return np.concatenate((X, Z))
+    
+    @abstractmethod
+    def train(self, X, nb_epoch, batch_size, verbose=2):
+        pass
+
+    @abstractmethod
+    def generate(self):
+        pass
+
+
+class GAN(BaseGAN):
         
     def train(self, X, nb_epoch, batch_size, verbose=2):
         num_batches = int(X.shape[0] / batch_size)

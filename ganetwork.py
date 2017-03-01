@@ -13,7 +13,7 @@ class BaseGAN(metaclass=ABCMeta):
         self.discriminator = discriminator
         self.d_optim = d_optim
         self.g_optim = g_optim
-        
+
     def _prepare_adversarial_models(self):
         self.discriminator.trainable = True
         self.discriminator.compile(loss='binary_crossentropy', optimizer=self.d_optim)
@@ -23,7 +23,7 @@ class BaseGAN(metaclass=ABCMeta):
         self.full_model.add(self.discriminator)
         self.discriminator.trainable = False
         self.full_model.compile(loss='binary_crossentropy', optimizer=self.g_optim)
-        
+
     @abstractmethod    
     def _sample_generator_data(self):
         pass

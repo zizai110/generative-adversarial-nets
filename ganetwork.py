@@ -1,6 +1,8 @@
+from abc import ABCMeta, abstractmethod
 from keras.models import Sequential
 from keras.optimizers import Adam
 import numpy as np
+
 
 
 class GAN:

@@ -23,21 +23,20 @@ class GAN:
         self.discriminator.trainable = False
         self.full_model.compile(loss='binary_crossentropy', optimizer=self.g_optim)
         
-    def _sample_generator_data(self, batch_size):
-        return np.random.uniform(-1, 1, (batch_size, self.generator.get_input_shape_at(0)[1]))
+    def _sample_generator_data(self, n_samples):
+        return np.random.uniform(-1, 1, (n_samples, self.generator.get_input_shape_at(0)[1]))
 
-    def _sample_discriminator_data(self, X, batch_size, batch_index):
-        X_batch = X[batch_index * batch_size:(batch_index + 1) * batch_size]
-        Z_batch = self.generator.predict(self._sample_noise(batch_size))
-        X_discriminator = np.concatenate((X_batch, Z_batch))
-        return X_discriminator
+    def _sample_discriminator_data(self, X, n_samples):
+        Z = self.generator.predict(self._sample_generator_data(n_samples))
+        return np.concatenate((X, Z))
         
     def train(self, X, nb_epoch, batch_size, verbose=2):
         num_batches = int(X.shape[0] / batch_size)
         self._prepare_adversarial_models()
         for epoch in range(nb_epoch):
             for batch_index in range(num_batches):
-                d_loss = self.discriminator.train_on_batch(self._sample_discriminator_data(X, batch_size, batch_index), [1] * batch_size + [0] * batch_size)
+                X_batch = X[batch_index * batch_size:(batch_index + 1) * batch_size]
+                d_loss = self.discriminator.train_on_batch(self._sample_discriminator_data(X_batch, batch_size), [1] * batch_size + [0] * batch_size)
                 g_loss = self.full_model.train_on_batch(self._sample_generator_data(batch_size), [1] * batch_size)
                 if verbose == 2:
                     print('Epoch %d, Batch %d, d_loss: %f, g_loss: %f' % (epoch, batch_index, d_loss, g_loss))    

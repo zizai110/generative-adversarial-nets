@@ -30,15 +30,14 @@ class GAN:
         X_batch = X[batch_index * batch_size:(batch_index + 1) * batch_size]
         Z_batch = self.generator.predict(self._sample_noise(batch_size))
         X_discriminator = np.concatenate((X_batch, Z_batch))
-        y_discriminator = [1] * batch_size + [0] * batch_size
-        return X_discriminator, y_discriminator
+        return X_discriminator
         
     def train(self, X, nb_epoch, batch_size, verbose=2):
         num_batches = int(X.shape[0] / batch_size)
         self._prepare_adversarial_models()
         for epoch in range(nb_epoch):
             for batch_index in range(num_batches):
-                d_loss = self.discriminator.train_on_batch(*self._sample_discriminator_data(X, batch_size, batch_index))
+                d_loss = self.discriminator.train_on_batch(self._sample_discriminator_data(X, batch_size, batch_index), [1] * batch_size + [0] * batch_size)
                 g_loss = self.full_model.train_on_batch(self._sample_generator_data(batch_size), [1] * batch_size)
                 if verbose == 2:
                     print('Epoch %d, Batch %d, d_loss: %f, g_loss: %f' % (epoch, batch_index, d_loss, g_loss))    

@@ -13,12 +13,12 @@ class BaseGAN:
         self.generator_optimizer = generator_optimizer
 
     @staticmethod
-    def _initialize_model(model_layers):
+    def _initialize_model(model_layers, input_layer_correction=0):
         model_parameters = {}
         for layer_index in range(len(model_layers) - 1):
             model_parameters['W' + str(layer_index)] = tf.Variable(tf.random_uniform([model_layers[layer_index][0], model_layers[layer_index + 1][0]]))
             model_parameters['b' + str(layer_index)] = tf.Variable(tf.random_uniform([model_layers[layer_index + 1][0]]))
-        input_data_placeholder = tf.placeholder(tf.float32, shape=[None, model_layers[0][0]])
+        input_data_placeholder = tf.placeholder(tf.float32, shape=[None, model_layers[0][0] - input_layer_correction])
         return input_data_placeholder, model_parameters
     
     @staticmethod
@@ -94,9 +94,10 @@ class CGAN(BaseGAN):
         return y
 
     def train(self, X, y, nb_epoch, batch_size, verbose=1):
-        X_placeholder, discriminator_parameters = CGAN._initialize_model(self.discriminator_layers)
-        Z_placeholder, generator_parameters = CGAN._initialize_model(self.generator_layers)
-        y_placeholder = tf.placeholder(tf.float32, [None, y.shape[1]])
+        n_classes = y.shape[1]
+        X_placeholder, discriminator_parameters = CGAN._initialize_model(self.discriminator_layers, n_classes)
+        Z_placeholder, generator_parameters = CGAN._initialize_model(self.generator_layers, n_classes)
+        y_placeholder = tf.placeholder(tf.float32, [None, n_classes])
         
         generator_logit = CGAN._output_logit_tensor(tf.concat(axis=1, values=[Z_placeholder, y_placeholder]), self.generator_layers, generator_parameters)
         discriminator_logit_real = CGAN._output_logit_tensor(tf.concat(axis=1, values=[X_placeholder, y_placeholder]), self.discriminator_layers, discriminator_parameters)
@@ -113,12 +114,11 @@ class CGAN(BaseGAN):
         sess.run(init)
 
         n_batches = int(X.shape[0] / batch_size)
-        n_Z_features = self.generator_layers[0][0]
+        n_Z_features = self.generator_layers[0][0] - n_classes
 
         for epoch in range(nb_epoch):
             epoch_shuffled_indices = np.random.permutation(range(X.shape[0]))
-            X_epoch = X[epoch_shuffled_indices]
-            y_epoch = y[epoch_shuffled_indices]
+            X_epoch, y_epoch = X[epoch_shuffled_indices], y[epoch_shuffled_indices]
             for batch_index in range(n_batches):
                 start_index = batch_index * batch_size
                 end_index = start_index + batch_size

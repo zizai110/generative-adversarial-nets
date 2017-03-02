@@ -85,6 +85,7 @@ class GAN(BaseGAN):
         
         sess.close()
 
+
 class CGAN(BaseGAN):
 
     @staticmethod

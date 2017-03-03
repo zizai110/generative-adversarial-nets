@@ -4,7 +4,7 @@ import tensorflow as tf
 
 OPTIMIZER = tf.train.AdamOptimizer()
 
-def _initialize_model(model_layers, input_layer_correction=0):
+def _initialize_model(model_layers, input_layer_correction):
     model_parameters = {}
     for layer_index in range(len(model_layers) - 1):
         model_parameters['W' + str(layer_index)] = tf.Variable(tf.random_uniform([model_layers[layer_index][0], model_layers[layer_index + 1][0]]))
@@ -50,77 +50,92 @@ class BaseGAN:
         self.discriminator_optimizer = discriminator_optimizer
         self.generator_optimizer = generator_optimizer
 
-
-class GAN(BaseGAN):
-
-    def train(self, X, nb_epoch, batch_size, verbose=1):
-        X_placeholder, discriminator_parameters = _initialize_model(self.discriminator_layers)
-        Z_placeholder, generator_parameters = _initialize_model(self.generator_layers)
+    def _prepare_training(self, X, y, batch_size):
+        if y is None:
+            self.n_classes = 0
+            self.y_placeholder = None
+        else:
+            self.n_classes = y.shape[1]
+            self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_classes])
+        self.X_placeholder, self.discriminator_parameters = _initialize_model(self.discriminator_layers, self.n_classes)
+        self.Z_placeholder, self.generator_parameters = _initialize_model(self.generator_layers, self.n_classes)
         
-        generator_logit = _output_logit_tensor(Z_placeholder, self.generator_layers, generator_parameters)
-        discriminator_logit_real = _output_logit_tensor(X_placeholder, self.discriminator_layers, discriminator_parameters)
-        discriminator_logit_generated = _output_logit_tensor(tf.nn.sigmoid(generator_logit), self.discriminator_layers, discriminator_parameters)
+        if y is None:
+            generator_logit = _output_logit_tensor(self.Z_placeholder, self.generator_layers, self.generator_parameters)
+            discriminator_logit_real = _output_logit_tensor(self.X_placeholder, self.discriminator_layers, self.discriminator_parameters)
+            discriminator_logit_generated = _output_logit_tensor(tf.nn.sigmoid(generator_logit), self.discriminator_layers, self.discriminator_parameters)
+        else:
+            generator_logit = _output_logit_tensor(tf.concat(axis=1, values=[self.Z_placeholder, self.y_placeholder]), self.generator_layers, self.generator_parameters)
+            discriminator_logit_real = _output_logit_tensor(tf.concat(axis=1, values=[self.X_placeholder, self.y_placeholder]), self.discriminator_layers, self.discriminator_parameters)
+            discriminator_logit_generated = _output_logit_tensor(tf.concat(axis=1, values=[tf.nn.sigmoid(generator_logit), self.y_placeholder]), self.discriminator_layers, self.discriminator_parameters)
+        
+        self.discriminator_loss = _return_loss(discriminator_logit_real, True) + _return_loss(discriminator_logit_generated, False)
+        self.generator_loss = _return_loss(discriminator_logit_generated, True)
 
-        discriminator_loss = _return_loss(discriminator_logit_real, True) + _return_loss(discriminator_logit_generated, False)
-        generator_loss = _return_loss(discriminator_logit_generated, True)
+        self.discriminator_update_parameters = _update_model_parameters(self.discriminator_optimizer, self.discriminator_loss, self.discriminator_parameters)
+        self.generator_update_parameters = _update_model_parameters(self.generator_optimizer, self.generator_loss, self.generator_parameters)
 
-        discriminator_update_step = _update_model_parameters(self.discriminator_optimizer, discriminator_loss, discriminator_parameters)
-        generator_update_step = _update_model_parameters(self.generator_optimizer, generator_loss, generator_parameters)
+        self.n_batches = int(X.shape[0] / batch_size)
+        self.n_Z_features = self.generator_layers[0][0] - self.n_classes
 
-        sess = tf.Session()
-        init = tf.global_variables_initializer()
-        sess.run(init)
-
-        n_batches = int(X.shape[0] / batch_size)
-        n_Z_features = self.generator_layers[0][0]
-
+    def _mini_batch_training(n_batches, ):
+        for batch_index in range(self.n_batches):
+            start_index = batch_index * batch_size
+            end_index = start_index + batch_size
+            X_batch = X_epoch[start_index:end_index]
+            if y is not None:
+                y_batch = y_epoch[start_index:end_index]
+            if y is None:
+                _, discriminator_loss_value = session.run([self.discriminator_update_parameters, self.discriminator_loss], feed_dict={self.X_placeholder: X_batch, self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features)})
+            else:
+                _, discriminator_loss_value = session.run([self.discriminator_update_parameters, self.discriminator_loss], feed_dict={self.X_placeholder: X_batch, self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features), self.y_placeholder: y_batch})
+    
+    def _start_training(self, X, y, nb_epoch, batch_size, discriminator_steps, verbose, session):
         for epoch in range(nb_epoch):
-            X_epoch = X[np.random.permutation(range(X.shape[0]))]
-            for batch_index in range(n_batches):
+            for _ in range(discriminator_steps):
+                epoch_shuffled_indices = np.random.permutation(range(X.shape[0]))
+                X_epoch = X[epoch_shuffled_indices]
+                if y is not None:
+                    y_epoch = y[epoch_shuffled_indices]
+                for batch_index in range(self.n_batches):
+                    start_index = batch_index * batch_size
+                    end_index = start_index + batch_size
+                    X_batch = X_epoch[start_index:end_index]
+                    if y is not None:
+                        y_batch = y_epoch[start_index:end_index]
+                    if y is None:
+                        _, discriminator_loss_value = session.run([self.discriminator_update_parameters, self.discriminator_loss], feed_dict={self.X_placeholder: X_batch, self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features)})
+                    else:
+                        _, discriminator_loss_value = session.run([self.discriminator_update_parameters, self.discriminator_loss], feed_dict={self.X_placeholder: X_batch, self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features), self.y_placeholder: y_batch})
+            epoch_shuffled_indices = np.random.permutation(range(X.shape[0]))
+            X_epoch = X[epoch_shuffled_indices]
+            if y is not None:
+                y_epoch = y[epoch_shuffled_indices]
+            for batch_index in range(self.n_batches):
                 start_index = batch_index * batch_size
                 end_index = start_index + batch_size
                 X_batch = X_epoch[start_index:end_index]
-                _, discriminator_loss_value = sess.run([discriminator_update_step, discriminator_loss], feed_dict={X_placeholder: X_batch, Z_placeholder: _sample_Z(batch_size, n_Z_features)})
-                _, generator_loss_value = sess.run([generator_update_step, generator_loss], feed_dict={Z_placeholder: _sample_Z(batch_size, n_Z_features)})
+                if y is not None:
+                    y_batch = y_epoch[start_index:end_index]
+                if y is None:
+                    _, generator_loss_value = session.run([self.generator_update_parameters, self.generator_loss], feed_dict={self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features)})
+                else:
+                    _, generator_loss_value = session.run([self.generator_update_parameters, self.generator_loss], feed_dict={self.Z_placeholder: _sample_Z(batch_size, self.n_Z_features), self.y_placeholder: y_batch})
             print('Epoch: {}, discriminator loss: {}, generator loss: {}'.format(epoch, discriminator_loss_value, generator_loss_value))
-        
-        sess.close()
 
+
+class GAN(BaseGAN):
+
+    def train(self, X, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
+        super()._prepare_training(X, None, batch_size)
+        with tf.Session() as sess:
+            tf.global_variables_initializer().run()
+            super()._start_training(X, None, nb_epoch, batch_size, discriminator_steps, verbose, sess)
 
 class CGAN(BaseGAN):
 
-    def train(self, X, y, nb_epoch, batch_size, verbose=1):
-        n_classes = y.shape[1]
-        X_placeholder, discriminator_parameters = _initialize_model(self.discriminator_layers, n_classes)
-        Z_placeholder, generator_parameters = _initialize_model(self.generator_layers, n_classes)
-        y_placeholder = tf.placeholder(tf.float32, [None, n_classes])
-        
-        generator_logit = _output_logit_tensor(tf.concat(axis=1, values=[Z_placeholder, y_placeholder]), self.generator_layers, generator_parameters)
-        discriminator_logit_real = _output_logit_tensor(tf.concat(axis=1, values=[X_placeholder, y_placeholder]), self.discriminator_layers, discriminator_parameters)
-        discriminator_logit_generated = _output_logit_tensor(tf.concat(axis=1, values=[tf.nn.sigmoid(generator_logit), y_placeholder]), self.discriminator_layers, discriminator_parameters)
-
-        discriminator_loss = _return_loss(discriminator_logit_real, True) + _return_loss(discriminator_logit_generated, False)
-        generator_loss = _return_loss(discriminator_logit_generated, True)
-
-        discriminator_update_step = _update_model_parameters(self.discriminator_optimizer, discriminator_loss, discriminator_parameters)
-        generator_update_step = _update_model_parameters(self.generator_optimizer, generator_loss, generator_parameters)
-
-        sess = tf.Session()
-        init = tf.global_variables_initializer()
-        sess.run(init)
-
-        n_batches = int(X.shape[0] / batch_size)
-        n_Z_features = self.generator_layers[0][0] - n_classes
-
-        for epoch in range(nb_epoch):
-            epoch_shuffled_indices = np.random.permutation(range(X.shape[0]))
-            X_epoch, y_epoch = X[epoch_shuffled_indices], y[epoch_shuffled_indices]
-            for batch_index in range(n_batches):
-                start_index = batch_index * batch_size
-                end_index = start_index + batch_size
-                X_batch, y_batch = X_epoch[start_index:end_index], y_epoch[start_index:end_index]
-                _, discriminator_loss_value = sess.run([discriminator_update_step, discriminator_loss], feed_dict={X_placeholder: X_batch, Z_placeholder: _sample_Z(batch_size, n_Z_features), y_placeholder: y_batch})
-                _, generator_loss_value = sess.run([generator_update_step, generator_loss], feed_dict={Z_placeholder: _sample_Z(batch_size, n_Z_features), y_placeholder: y_batch})
-            print('Epoch: {}, discriminator loss: {}, generator loss: {}'.format(epoch, discriminator_loss_value, generator_loss_value))
-
-        sess.close()
+    def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
+        super()._prepare_training(X, y, batch_size)
+        with tf.Session() as sess:
+            tf.global_variables_initializer().run()
+            super()._start_training(X, y, nb_epoch, batch_size, discriminator_steps, verbose, sess)

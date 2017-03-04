@@ -41,6 +41,17 @@ def _return_loss(logits, positive_class_labels=True):
 def _update_model_parameters(optimizer, loss, model_parameters):
     return optimizer.minimize(loss, var_list=list(model_parameters.values()))
 
+def mini_batch_indices_generator(n_samples, batch_size):
+    start_index = 0
+    end_index = batch_size
+    while start_index < n_samples:
+        yield start_index, end_index
+        start_index += batch_size
+        if end_index + batch_size <= n_samples:
+            end_index += batch_size
+        else:
+            end_index += n_samples % batch_size
+
 
 class BaseGAN:
 

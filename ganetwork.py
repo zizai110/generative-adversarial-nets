@@ -73,12 +73,8 @@ class BaseGAN:
         self.generator_optimizer = generator_optimizer
 
     def _prepare_training(self, X, y, batch_size):
-        if y is None:
-            self.n_classes = 0
-            self.y_placeholder = None
-        else:
-            self.n_classes = y.shape[1]
-            self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_classes])
+        self.n_classes = y.shape[1] if y is not None else 0
+        self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_classes]) if y is not None else None
         self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_classes)
         self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_classes)
         

@@ -138,5 +138,12 @@ class GAN(BaseGAN):
 class CGAN(BaseGAN):
 
     def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
-        super()._prepare_training(X, y, batch_size)
+        super()._initialize_training_parameters(X, y, batch_size)
         super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
+        return self
+
+    def generate_samples(self, n_samples, class_label):
+        input_tensor = np.concatenate([sample_Z(n_samples, self.n_Z_features), sample_y(n_samples, self.n_classes, class_label)], axis=1)
+        logits = output_logits_tensor(input_tensor, self.generator_layers, self.generator_parameters)
+        generated_samples = self.sess.run(tf.nn.sigmoid(logits))
+        return generated_samples

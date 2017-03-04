@@ -4,6 +4,11 @@ import tensorflow as tf
 
 OPTIMIZER = tf.train.AdamOptimizer()
 
+def bind_columns(tensor1, tensor2):
+    if tensor2 is None:
+        return tensor1
+    return tf.concat(axis=1, values=[tensor1, tensor2])
+
 def initialize_model(model_layers, input_layer_correction):
     model_parameters = {}
     for layer_index in range(len(model_layers) - 1):
@@ -78,14 +83,9 @@ class BaseGAN:
         self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_classes)
         self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_classes)
         
-        if y is None:
-            generator_logit = output_logit_tensor(self.Z_placeholder, self.generator_layers, self.generator_parameters)
-            discriminator_logit_real = output_logit_tensor(self.X_placeholder, self.discriminator_layers, self.discriminator_parameters)
-            discriminator_logit_generated = output_logit_tensor(tf.nn.sigmoid(generator_logit), self.discriminator_layers, self.discriminator_parameters)
-        else:
-            generator_logit = output_logit_tensor(tf.concat(axis=1, values=[self.Z_placeholder, self.y_placeholder]), self.generator_layers, self.generator_parameters)
-            discriminator_logit_real = output_logit_tensor(tf.concat(axis=1, values=[self.X_placeholder, self.y_placeholder]), self.discriminator_layers, self.discriminator_parameters)
-            discriminator_logit_generated = output_logit_tensor(tf.concat(axis=1, values=[tf.nn.sigmoid(generator_logit), self.y_placeholder]), self.discriminator_layers, self.discriminator_parameters)
+        generator_logit = output_logit_tensor(bind_columns(self.Z_placeholder, self.y_placeholder), self.generator_layers, self.generator_parameters)
+        discriminator_logit_real = output_logit_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
+        discriminator_logit_generated = output_logit_tensor(bind_columns(tf.nn.sigmoid(generator_logit), self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
         
         self.discriminator_loss = return_loss(discriminator_logit_real, True) + return_loss(discriminator_logit_generated, False)
         self.generator_loss = return_loss(discriminator_logit_generated, True)

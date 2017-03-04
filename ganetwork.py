@@ -17,7 +17,7 @@ def initialize_model(model_layers, input_layer_correction):
     input_data_placeholder = tf.placeholder(tf.float32, shape=[None, model_layers[0][0] - input_layer_correction])
     return input_data_placeholder, model_parameters
     
-def output_logit_tensor(input_tensor, model_layers, model_parameters):
+def output_logits_tensor(input_tensor, model_layers, model_parameters):
     output_tensor = input_tensor
     for layer_index in range(len(model_layers) - 1):
         logit_tensor = tf.matmul(output_tensor, model_parameters['W' + str(layer_index)]) + model_parameters['b' + str(layer_index)]
@@ -77,15 +77,15 @@ class BaseGAN:
         self.discriminator_optimizer = discriminator_optimizer
         self.generator_optimizer = generator_optimizer
 
-    def _prepare_training(self, X, y, batch_size):
+    def _initialize_training_parameters(self, X, y, batch_size):
         self.n_classes = y.shape[1] if y is not None else 0
         self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_classes]) if y is not None else None
         self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_classes)
         self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_classes)
         
-        generator_logit = output_logit_tensor(bind_columns(self.Z_placeholder, self.y_placeholder), self.generator_layers, self.generator_parameters)
-        discriminator_logit_real = output_logit_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
-        discriminator_logit_generated = output_logit_tensor(bind_columns(tf.nn.sigmoid(generator_logit), self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
+        generator_logit = output_logits_tensor(bind_columns(self.Z_placeholder, self.y_placeholder), self.generator_layers, self.generator_parameters)
+        discriminator_logit_real = output_logits_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
+        discriminator_logit_generated = output_logits_tensor(bind_columns(tf.nn.sigmoid(generator_logit), self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
         
         self.discriminator_loss = return_loss(discriminator_logit_real, True) + return_loss(discriminator_logit_generated, False)
         self.generator_loss = return_loss(discriminator_logit_generated, True)
@@ -99,6 +99,9 @@ class BaseGAN:
 
         self.discriminator_placeholders = [placeholder for placeholder in [self.X_placeholder, self.Z_placeholder, self.y_placeholder] if placeholder is not None]
         self.generator_placeholders = [placeholder for placeholder in [self.Z_placeholder, self.y_placeholder] if placeholder is not None]
+
+        self.sess = tf.Session()
+        tf.global_variables_initializer().run(session=self.sess)
 
     def _return_epoch_loss_value(self, X, y, batch_size, session, model_update_parameters, model_loss, placeholders):
         X_epoch, y_epoch = shuffle_data(X, y)
@@ -122,15 +125,18 @@ class BaseGAN:
 class GAN(BaseGAN):
 
     def train(self, X, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
-        super()._prepare_training(X, None, batch_size)
-        with tf.Session() as sess:
-            tf.global_variables_initializer().run()
-            super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, verbose, sess)
+        super()._initialize_training_parameters(X, None, batch_size)
+        super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
+        return self
+
+    def generate_samples(self, n_samples):
+        input_tensor = sample_Z(n_samples, self.n_Z_features)
+        logits = output_logits_tensor(input_tensor, self.generator_layers, self.generator_parameters)
+        generated_samples = self.sess.run(tf.nn.sigmoid(logits))
+        return generated_samples
 
 class CGAN(BaseGAN):
 
     def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
         super()._prepare_training(X, y, batch_size)
-        with tf.Session() as sess:
-            tf.global_variables_initializer().run()
-            super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, sess)
+        super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)

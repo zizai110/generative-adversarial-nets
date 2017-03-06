@@ -1,3 +1,12 @@
+
+"""
+This module contains the classes for Generative 
+Adversarial Networks (GAN) and Conditional Generative 
+Adversarial Networks (CGAN).
+"""
+
+# Author: Georgios Douzas <gdouzas@icloud.com>
+
 import numpy as np
 import tensorflow as tf
 
@@ -70,6 +79,33 @@ def mini_batch_indices_generator(n_samples, batch_size):
 
 
 class BaseGAN:
+
+    """Base class for GANs and CGANs.  
+    
+    Parameters
+    ----------
+    discriminator_layers : list of (int, activation function) tuples
+        Each tuple represents the number of neurons and the activation 
+        function of the discriminator's corresponding layer. The 
+        number of neurons and the activation function for the first 
+        layer should be equal to the number of features of the X 
+        matrix and equal to None, correspondingly i.e. (X.shape[1], None). 
+        The number of neurons and the activation function for the last 
+        layer should be equal to 1 and equal to None, correspondingly i.e. 
+        (1, None).
+    generator_layers : list of (int, activation function) tuples
+        Each tuple represents the number of neurons and the activation 
+        function of the generators's corresponding layer. The 
+        number of neurons and the activation function for the first 
+        layer should be equal to the number of features of the Z 
+        matrix and equal to None, correspondingly i.e. (Z.shape[1], None). 
+        The number of neurons and the activation function for the last 
+        layer should be equal to the number of features of the X matrix 
+         and equal to None, correspondingly i.e. (X.shape[1], None).
+    discriminator_optimizer: TensorFlow optimizer
+        The number of CPUs to use to do the computation. -1 means
+        'all CPUs'.
+    """
 
     def __init__(self, discriminator_layers, generator_layers, discriminator_optimizer=OPTIMIZER, generator_optimizer=OPTIMIZER):
         self.discriminator_layers = discriminator_layers

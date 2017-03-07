@@ -51,8 +51,11 @@ def sample_Z(n_samples, n_features):
 def sample_y(n_samples, n_y_features, class_label):
     """Returns a matrix of (n_samples, n_y_features) shape using 
     one-hot encoding for the class label. """
-    y = np.zeros(shape=[n_samples, n_y_features]).astype(np.float32)
-    y[:, class_label] = 1.
+    if n_y_features > 2:
+        y = np.zeros(shape=[n_samples, n_y_features], dtype='float32')
+        y[:, class_label] = 1.
+    else:
+        y = np.zeros([n_samples, 1], dtype='float32') if class_label == 0 else np.ones([n_samples, 1], dtype='float32')
     return y
     
 def return_loss(logits, positive_class_labels=True):

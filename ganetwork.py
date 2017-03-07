@@ -48,10 +48,10 @@ def sample_Z(n_samples, n_features):
     matrix from a uniform distribution in the [-1, 1] interval."""
     return np.random.uniform(-1., 1., size=[n_samples, n_features]).astype(np.float32)
 
-def sample_y(n_samples, n_classes, class_label):
-    """Returns a matrix of (n_samples, n_classes) shape using 
+def sample_y(n_samples, n_y_features, class_label):
+    """Returns a matrix of (n_samples, n_y_features) shape using 
     one-hot encoding for the class label. """
-    y = np.zeros(shape=[n_samples, n_classes]).astype(np.float32)
+    y = np.zeros(shape=[n_samples, n_y_features]).astype(np.float32)
     y[:, class_label] = 1.
     return y
     
@@ -107,10 +107,10 @@ class BaseGAN:
 
     def _initialize_training_parameters(self, X, y, batch_size):
         """Private method that initializes the GAN training parameters."""
-        self.n_classes = y.shape[1] if y is not None else 0
-        self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_classes]) if y is not None else None
-        self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_classes)
-        self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_classes)
+        self.n_y_features = y.shape[1] if y is not None else 0
+        self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_y_features]) if y is not None else None
+        self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_y_features)
+        self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_y_features)
         
         generator_logit = output_logits_tensor(bind_columns(self.Z_placeholder, self.y_placeholder), self.generator_layers, self.generator_parameters)
         discriminator_logit_real = output_logits_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
@@ -124,7 +124,7 @@ class BaseGAN:
 
         self.n_X_samples = X.shape[0]
         self.n_batches = self.n_X_samples // batch_size
-        self.n_Z_features = self.generator_layers[0][0] - self.n_classes
+        self.n_Z_features = self.generator_layers[0][0] - self.n_y_features
 
         self.discriminator_placeholders = [placeholder for placeholder in [self.X_placeholder, self.Z_placeholder, self.y_placeholder] if placeholder is not None]
         self.generator_placeholders = [placeholder for placeholder in [self.Z_placeholder, self.y_placeholder] if placeholder is not None]
@@ -202,18 +202,18 @@ class CGAN(BaseGAN):
         Each tuple represents the number of neurons and the activation 
         function of the discriminator's corresponding layer. The number 
         of neurons and the activation function for the first layer should 
-        be equal to (X.shape[1] + n_classes, None) while the number of 
+        be equal to (X.shape[1] + n_y_features, None) while the number of 
         neurons and the activation function for the last layer should be 
-        equal to (1, None), where X is the input data and n_classes is 
-        the number of class labels in y.
+        equal to (1, None), where X is the input data and n_y_features is 
+        the number of y matrix features.
     generator_layers : list of (int, activation function) tuples
         Each tuple represents the number of neurons and the activation 
         function of the generators's corresponding layer. The number 
         of neurons and the activation function for the first layer should 
-        be equal to (Z.shape[1] + n_classes, None) while the number of 
+        be equal to (Z.shape[1] + n_y_features, None) while the number of 
         neurons and the activation function for the last layer should be 
-        equal to (X.shape[1], None), where X is the input data and n_classes 
-        is the number of class labels in y.
+        equal to (X.shape[1], None), where X is the input data and n_y_features 
+        is the number of y matrix features.
     discriminator_optimizer: TensorFlow optimizer
         The optimizer for the discriminator.
     generator_optimizer: TensorFlow optimizer
@@ -221,10 +221,11 @@ class CGAN(BaseGAN):
     """
 
     def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
-        """Trains the Conditional GAN with X as the input data, y the class labels 
-        for nb_epoch number of epochs, batch_size the size of the mini batch, 
-        discriminator_steps as the number of discriminator gradient updates for 
-        each generator gradient update and verbose the level of verbosity."""
+        """Trains the Conditional GAN with X as the input data, y the one-hot
+        encoded class labels for nb_epoch number of epochs, batch_size the size 
+        of the mini batch, discriminator_steps as the number of discriminator 
+        gradient updates for each generator gradient update and verbose the 
+        level of verbosity."""
         super()._initialize_training_parameters(X, y, batch_size)
         super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
         return self
@@ -232,7 +233,7 @@ class CGAN(BaseGAN):
     def generate_samples(self, n_samples, class_label):
         """Generates n_samples number from the generator 
         conditioned on the class_label."""
-        input_tensor = np.concatenate([sample_Z(n_samples, self.n_Z_features), sample_y(n_samples, self.n_classes, class_label)], axis=1)
+        input_tensor = np.concatenate([sample_Z(n_samples, self.n_Z_features), sample_y(n_samples, self.n_y_features, class_label)], axis=1)
         logits = output_logits_tensor(input_tensor, self.generator_layers, self.generator_parameters)
         generated_samples = self.sess.run(tf.nn.sigmoid(logits))
         return generated_samples

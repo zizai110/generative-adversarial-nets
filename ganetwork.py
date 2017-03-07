@@ -25,8 +25,8 @@ def initialize_model(model_layers, input_layer_correction):
     a placeholder for the input data."""
     model_parameters = {}
     for layer_index in range(len(model_layers) - 1):
-        model_parameters['W' + str(layer_index)] = tf.Variable(tf.random_uniform([model_layers[layer_index][0], model_layers[layer_index + 1][0]]))
-        model_parameters['b' + str(layer_index)] = tf.Variable(tf.random_uniform([model_layers[layer_index + 1][0]]))
+        model_parameters['W' + str(layer_index)] = tf.Variable(tf.random_normal([model_layers[layer_index][0], model_layers[layer_index + 1][0]]))
+        model_parameters['b' + str(layer_index)] = tf.Variable(tf.zeros([model_layers[layer_index + 1][0]]))
     input_data_placeholder = tf.placeholder(tf.float32, shape=[None, model_layers[0][0] - input_layer_correction])
     return input_data_placeholder, model_parameters
     

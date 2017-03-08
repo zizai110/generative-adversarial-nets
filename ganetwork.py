@@ -165,13 +165,12 @@ class BaseGAN:
             _, loss_value = session.run([model_optimization, model_loss], feed_dict=feed_dict)
         return loss_value
 
-    def _train_gan(self, X, y, nb_epoch, batch_size, discriminator_steps, verbose, session):
+    def _train_gan(self, X, y, nb_epoch, batch_size, discriminator_steps, session):
         """Private method that trains the GAN."""
         for epoch in range(nb_epoch):
             for _ in range(discriminator_steps):
                 discriminator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.discriminator_optimization, self.discriminator_loss, self.discriminator_placeholders)
             generator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.generator_optimization, self.generator_loss, self.generator_placeholders)
-
             print('Epoch: {}, discriminator loss: {}, generator loss: {}'.format(epoch, discriminator_loss_value, generator_loss_value))
 
 
@@ -199,11 +198,10 @@ class GAN(BaseGAN):
         The optimizer for the generator.
     """
 
-    def train(self, X, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
+    def train(self, X, nb_epoch, batch_size, discriminator_steps=1):
         """Trains the GAN with X as the input data for nb_epoch number of epochs, 
-        batch_size the size of the mini batch, discriminator_steps as the number 
-        of discriminator gradient updates for each generator gradient update and 
-        verbose the level of verbosity."""
+        batch_size the size of the mini batch and discriminator_steps as the number 
+        of discriminator gradient updates for each generator gradient update."""
         super()._initialize_training_parameters(X, None, batch_size)
         super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
         return self
@@ -241,12 +239,11 @@ class CGAN(BaseGAN):
         The optimizer for the generator.
     """
 
-    def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1, verbose=1):
+    def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1):
         """Trains the Conditional GAN with X as the input data, y the one-hot
         encoded class labels for nb_epoch number of epochs, batch_size the size 
         of the mini batch, discriminator_steps as the number of discriminator 
-        gradient updates for each generator gradient update and verbose the 
-        level of verbosity."""
+        gradient updates for each generator gradient update."""
         super()._initialize_training_parameters(X, y, batch_size)
         super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
         return self

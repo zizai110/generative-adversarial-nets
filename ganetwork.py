@@ -9,6 +9,7 @@ Adversarial Networks (CGAN).
 
 import numpy as np
 import tensorflow as tf
+from math import sqrt
 
 
 OPTIMIZER = tf.train.AdamOptimizer()
@@ -46,7 +47,7 @@ def output_logits_tensor(input_tensor, model_layers, model_parameters):
 def sample_Z(n_samples, n_features):
     """Samples the elements of a (n_samples, n_features) shape 
     matrix from a uniform distribution in the [-1, 1] interval."""
-    return np.random.uniform(-1., 1., size=[n_samples, n_features]).astype(np.float32)
+    return np.random.normal(scale=1. / sqrt(n_samples / 2), size=[n_samples, n_features]).astype(np.float32)
 
 def sample_y(n_samples, n_y_features, class_label):
     """Returns a matrix of (n_samples, n_y_features) shape using 

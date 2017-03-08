@@ -9,7 +9,6 @@ Adversarial Networks (CGAN).
 
 import numpy as np
 import tensorflow as tf
-from math import sqrt
 
 
 OPTIMIZER = tf.train.AdamOptimizer()
@@ -21,13 +20,20 @@ def bind_columns(tensor1, tensor2):
         return tensor1
     return tf.concat(axis=1, values=[tensor1, tensor2])
 
-def initialize_model(model_layers, input_layer_correction):
+def initialize_model_parameters(n_input_units, n_output_units, initialization_choice):
+    shape = [n_input_units, n_output_units] if n_output_units is not None else [n_input_units]
+    initialization_types = {'xavier': tf.random_normal(shape=shape, stddev=1. / tf.sqrt(n_input_units / 2.)), 
+                            'normal': tf.random_normal(shape=shape), 
+                            'zeros': tf.zeros(shape=shape)}
+    return initialization_types[initialization_choice]
+
+def initialize_model(model_layers, input_layer_correction, weights_initialization_choice, bias_initialization_choice):
     """Initializes variables for the model parameters and 
     a placeholder for the input data."""
     model_parameters = {}
     for layer_index in range(len(model_layers) - 1):
-        model_parameters['W' + str(layer_index)] = tf.Variable(tf.random_normal([model_layers[layer_index][0], model_layers[layer_index + 1][0]]))
-        model_parameters['b' + str(layer_index)] = tf.Variable(tf.zeros([model_layers[layer_index + 1][0]]))
+        model_parameters['W' + str(layer_index)] = tf.Variable(initialize_model_parameters(model_layers[layer_index][0], model_layers[layer_index + 1][0], weights_initialization_choice))
+        model_parameters['b' + str(layer_index)] = tf.Variable(initialize_model_parameters(model_layers[layer_index + 1][0], None, bias_initialization_choice))
     input_data_placeholder = tf.placeholder(tf.float32, shape=[None, model_layers[0][0] - input_layer_correction])
     return input_data_placeholder, model_parameters
     
@@ -47,7 +53,7 @@ def output_logits_tensor(input_tensor, model_layers, model_parameters):
 def sample_Z(n_samples, n_features):
     """Samples the elements of a (n_samples, n_features) shape 
     matrix from a uniform distribution in the [-1, 1] interval."""
-    return np.random.normal(scale=1. / sqrt(n_samples / 2), size=[n_samples, n_features]).astype(np.float32)
+    return np.random.uniform(-1., 1., size=[n_samples, n_features]).astype(np.float32)
 
 def sample_y(n_samples, n_y_features, class_label):
     """Returns a matrix of (n_samples, n_y_features) shape using 
@@ -103,18 +109,29 @@ def mini_batch_indices_generator(n_samples, batch_size):
 class BaseGAN:
     """Base class for GANs and CGANs."""  
 
-    def __init__(self, discriminator_layers, generator_layers, discriminator_optimizer=OPTIMIZER, generator_optimizer=OPTIMIZER):
+    def __init__(self, discriminator_layers, 
+                       generator_layers, 
+                       discriminator_optimizer=OPTIMIZER, 
+                       generator_optimizer=OPTIMIZER, 
+                       discriminator_weights_initilization_choice='xavier',
+                       discriminator_bias_initilization_choice='zeros', 
+                       generator_weights_initilization_choice='xavier',
+                       generator_bias_initilization_choice='zeros'):
         self.discriminator_layers = discriminator_layers
         self.generator_layers = generator_layers
         self.discriminator_optimizer = discriminator_optimizer
         self.generator_optimizer = generator_optimizer
+        self.discriminator_weights_initilization_choice = discriminator_weights_initilization_choice
+        self.discriminator_bias_initilization_choice = discriminator_bias_initilization_choice
+        self.generator_weights_initilization_choice = generator_weights_initilization_choice
+        self.generator_bias_initilization_choice = generator_bias_initilization_choice
 
     def _initialize_training_parameters(self, X, y, batch_size):
         """Private method that initializes the GAN training parameters."""
         self.n_y_features = y.shape[1] if y is not None else 0
         self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_y_features]) if y is not None else None
-        self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_y_features)
-        self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_y_features)
+        self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_y_features, self.discriminator_weights_initilization_choice, self.discriminator_bias_initilization_choice)
+        self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_y_features, self.generator_weights_initilization_choice, self.generator_bias_initilization_choice)
         
         generator_logit = output_logits_tensor(bind_columns(self.Z_placeholder, self.y_placeholder), self.generator_layers, self.generator_parameters)
         discriminator_logit_real = output_logits_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)

@@ -9,6 +9,8 @@ Adversarial Networks (CGAN).
 
 import numpy as np
 import tensorflow as tf
+from math import sqrt
+import matplotlib.pyplot as plt
 
 
 OPTIMIZER = tf.train.AdamOptimizer()
@@ -109,16 +111,18 @@ def mini_batch_indices_generator(n_samples, batch_size):
 class BaseGAN:
     """Base class for GANs and CGANs."""  
 
-    def __init__(self, discriminator_layers, 
-                       generator_layers, 
-                       discriminator_optimizer=OPTIMIZER, 
-                       generator_optimizer=OPTIMIZER, 
+    def __init__(self, n_Z_features,
+                       discriminator_hidden_layers, 
+                       generator_hidden_layers, 
+                       discriminator_optimizer=OPTIMIZER,  
                        discriminator_weights_initilization_choice='xavier',
-                       discriminator_bias_initilization_choice='zeros', 
+                       discriminator_bias_initilization_choice='zeros',
+                       generator_optimizer=OPTIMIZER, 
                        generator_weights_initilization_choice='xavier',
                        generator_bias_initilization_choice='zeros'):
-        self.discriminator_layers = discriminator_layers
-        self.generator_layers = generator_layers
+        self.n_Z_features = n_Z_features
+        self.discriminator_hidden__layers = discriminator_hidden_layers
+        self.generator_hidden_layers = generator_hidden_layers
         self.discriminator_optimizer = discriminator_optimizer
         self.generator_optimizer = generator_optimizer
         self.discriminator_weights_initilization_choice = discriminator_weights_initilization_choice
@@ -128,7 +132,13 @@ class BaseGAN:
 
     def _initialize_training_parameters(self, X, y, batch_size):
         """Private method that initializes the GAN training parameters."""
+        self.n_samples = X.shape[0]
+        self.n_X_features = X.shape[1]
         self.n_y_features = y.shape[1] if y is not None else 0
+
+        self.discriminator_layers = [(self.n_X_features + self.n_y_features, None)] + self.discriminator_hidden__layers + [(1, None)]
+        self.generator_layers = [(self.n_Z_features + self.n_y_features, None)] + self.discriminator_hidden__layers + [(self.n_X_features, None)]
+
         self.y_placeholder = tf.placeholder(tf.float32, [None, self.n_y_features]) if y is not None else None
         self.X_placeholder, self.discriminator_parameters = initialize_model(self.discriminator_layers, self.n_y_features, self.discriminator_weights_initilization_choice, self.discriminator_bias_initilization_choice)
         self.Z_placeholder, self.generator_parameters = initialize_model(self.generator_layers, self.n_y_features, self.generator_weights_initilization_choice, self.generator_bias_initilization_choice)
@@ -143,9 +153,7 @@ class BaseGAN:
         self.discriminator_optimization = define_optimization(self.discriminator_optimizer, self.discriminator_loss, self.discriminator_parameters)
         self.generator_optimization = define_optimization(self.generator_optimizer, self.generator_loss, self.generator_parameters)
 
-        self.n_X_samples = X.shape[0]
-        self.n_batches = self.n_X_samples // batch_size
-        self.n_Z_features = self.generator_layers[0][0] - self.n_y_features
+        self.n_batches = self.n_samples // batch_size
 
         self.discriminator_placeholders = [placeholder for placeholder in [self.X_placeholder, self.Z_placeholder, self.y_placeholder] if placeholder is not None]
         self.generator_placeholders = [placeholder for placeholder in [self.Z_placeholder, self.y_placeholder] if placeholder is not None]
@@ -157,9 +165,9 @@ class BaseGAN:
         """Private method that returns the loss function value for an 
         epoch of training."""
         X_epoch, y_epoch = shuffle_data(X, y)
-        mini_batch_indices = mini_batch_indices_generator(self.n_X_samples, batch_size)
+        mini_batch_indices = mini_batch_indices_generator(self.n_samples, batch_size)
         for batch_index in range(self.n_batches):
-            X_batch, y_batch = create_mini_batch_data(X, y, next(mini_batch_indices))
+            X_batch, y_batch = create_mini_batch_data(X_epoch, y_epoch, next(mini_batch_indices))
             feed_dict = {self.X_placeholder: X_batch, self.Z_placeholder: sample_Z(batch_size, self.n_Z_features), self.y_placeholder: y_batch}
             feed_dict = {placeholder: data for placeholder, data in feed_dict.items() if placeholder in placeholders}
             _, loss_value = session.run([model_optimization, model_loss], feed_dict=feed_dict)
@@ -171,6 +179,15 @@ class BaseGAN:
             for _ in range(discriminator_steps):
                 discriminator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.discriminator_optimization, self.discriminator_loss, self.discriminator_placeholders)
             generator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.generator_optimization, self.generator_loss, self.generator_placeholders)
+            X_generated = self.generate_samples(10)
+            plt.rcParams['figure.figsize'] = (50, 50)
+            fig, ax = plt.subplots(1, 10)
+            img_dim = int(sqrt(X.shape[1]))
+            X_img = X_generated.reshape(X_generated.shape[0], img_dim, -1)
+            for ind in range(10):    
+                ax[ind].imshow(X_img[ind], cmap='gray_r')
+                ax[ind].axis('off')
+            plt.show()
             print('Epoch: {}, discriminator loss: {}, generator loss: {}'.format(epoch, discriminator_loss_value, generator_loss_value))
 
 
@@ -203,7 +220,7 @@ class GAN(BaseGAN):
         batch_size the size of the mini batch and discriminator_steps as the number 
         of discriminator gradient updates for each generator gradient update."""
         super()._initialize_training_parameters(X, None, batch_size)
-        super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
+        super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, self.sess)
         return self
 
     def generate_samples(self, n_samples):
@@ -245,7 +262,7 @@ class CGAN(BaseGAN):
         of the mini batch, discriminator_steps as the number of discriminator 
         gradient updates for each generator gradient update."""
         super()._initialize_training_parameters(X, y, batch_size)
-        super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, verbose, self.sess)
+        super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, self.sess)
         return self
 
     def generate_samples(self, n_samples, class_label):

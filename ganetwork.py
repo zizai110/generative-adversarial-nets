@@ -81,6 +81,14 @@ def define_optimization(optimizer, loss, model_parameters):
     loss function and model parameters."""
     return optimizer.minimize(loss, var_list=list(model_parameters.values()))
 
+def split_data(X, y, validation_split):
+    n_samples = X.shape[0]
+    permuted_indices = np.random.permutation(range(n_samples))
+    n_validation_indices = np.floor(validation_split * n_samples).astype(int)
+    X_val, y_val = X[:n_validation_indices], y[:n_validation_indices] if y is not None else None
+    X_train, y_train = X[n_validation_indices:], y[n_validation_indices:] if y is not None else None
+    return X_train, y_train, X_val, y_val
+
 def shuffle_data(X, y):
     """Shuffle the data."""
     epoch_shuffled_indices = np.random.permutation(range(X.shape[0]))
@@ -132,7 +140,6 @@ class BaseGAN:
 
     def _initialize_training_parameters(self, X, y, batch_size):
         """Private method that initializes the GAN training parameters."""
-        self.n_samples = X.shape[0]
         self.n_X_features = X.shape[1]
         self.n_y_features = y.shape[1] if y is not None else 0
 
@@ -147,13 +154,11 @@ class BaseGAN:
         discriminator_logit_real = output_logits_tensor(bind_columns(self.X_placeholder, self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
         discriminator_logit_generated = output_logits_tensor(bind_columns(tf.nn.sigmoid(generator_logit), self.y_placeholder), self.discriminator_layers, self.discriminator_parameters)
         
-        self.discriminator_loss = return_loss(discriminator_logit_real, True) + return_loss(discriminator_logit_generated, False)
-        self.generator_loss = return_loss(discriminator_logit_generated, True)
+        self.discriminator_loss_mixed_data = return_loss(discriminator_logit_real, True) + return_loss(discriminator_logit_generated, False)
+        self.discriminator_loss_generated_data = return_loss(discriminator_logit_generated, True)
 
-        self.discriminator_optimization = define_optimization(self.discriminator_optimizer, self.discriminator_loss, self.discriminator_parameters)
-        self.generator_optimization = define_optimization(self.generator_optimizer, self.generator_loss, self.generator_parameters)
-
-        self.n_batches = self.n_samples // batch_size
+        self.discriminator_optimization = define_optimization(self.discriminator_optimizer, self.discriminator_loss_mixed_data, self.discriminator_parameters)
+        self.generator_optimization = define_optimization(self.generator_optimizer, self.discriminator_loss_generated_data, self.generator_parameters)
 
         self.discriminator_placeholders = [placeholder for placeholder in [self.X_placeholder, self.Z_placeholder, self.y_placeholder] if placeholder is not None]
         self.generator_placeholders = [placeholder for placeholder in [self.Z_placeholder, self.y_placeholder] if placeholder is not None]
@@ -161,34 +166,29 @@ class BaseGAN:
         self.sess = tf.Session()
         tf.global_variables_initializer().run(session=self.sess)
 
-    def _return_epoch_loss_value(self, X, y, batch_size, session, model_optimization, model_loss, placeholders):
+    def _return_epoch_loss_value(self, X, y, batch_size, session, model_optimization, model_loss, placeholders, shuffle):
         """Private method that returns the loss function value for an 
         epoch of training."""
-        X_epoch, y_epoch = shuffle_data(X, y)
-        mini_batch_indices = mini_batch_indices_generator(self.n_samples, batch_size)
-        for batch_index in range(self.n_batches):
-            X_batch, y_batch = create_mini_batch_data(X_epoch, y_epoch, next(mini_batch_indices))
-            feed_dict = {self.X_placeholder: X_batch, self.Z_placeholder: sample_Z(batch_size, self.n_Z_features), self.y_placeholder: y_batch}
+        n_samples = X.shape[0]
+        if shuffle:
+            X_epoch, y_epoch = shuffle_data(X, y)
+        else:
+            X_epoch, y_epoch = X, y
+        mini_batch_indices = mini_batch_indices_generator(n_samples, batch_size)
+        n_batches = n_samples // batch_size
+        total_epoch_loss_value = 0
+        for batch_index in range(n_batches):
+            mb_indices = next(mini_batch_indices)
+            adjusted_batch_size = mb_indices[1] - mb_indices[0]
+            X_batch, y_batch = create_mini_batch_data(X_epoch, y_epoch, mb_indices)
+            feed_dict = {self.X_placeholder: X_batch, self.Z_placeholder: sample_Z(adjusted_batch_size, self.n_Z_features), self.y_placeholder: y_batch}
             feed_dict = {placeholder: data for placeholder, data in feed_dict.items() if placeholder in placeholders}
-            _, loss_value = session.run([model_optimization, model_loss], feed_dict=feed_dict)
-        return loss_value
-
-    def _train_gan(self, X, y, nb_epoch, batch_size, discriminator_steps, session):
-        """Private method that trains the GAN."""
-        for epoch in range(nb_epoch):
-            for _ in range(discriminator_steps):
-                discriminator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.discriminator_optimization, self.discriminator_loss, self.discriminator_placeholders)
-            generator_loss_value = self._return_epoch_loss_value(X, y, batch_size, session, self.generator_optimization, self.generator_loss, self.generator_placeholders)
-            X_generated = self.generate_samples(10)
-            plt.rcParams['figure.figsize'] = (50, 50)
-            fig, ax = plt.subplots(1, 10)
-            img_dim = int(sqrt(X.shape[1]))
-            X_img = X_generated.reshape(X_generated.shape[0], img_dim, -1)
-            for ind in range(10):    
-                ax[ind].imshow(X_img[ind], cmap='gray_r')
-                ax[ind].axis('off')
-            plt.show()
-            print('Epoch: {}, discriminator loss: {}, generator loss: {}'.format(epoch, discriminator_loss_value, generator_loss_value))
+            if model_optimization is not None:
+                _, mb_loss_value = session.run([model_optimization, model_loss], feed_dict=feed_dict)
+            else:
+                mb_loss_value = session.run(model_loss, feed_dict=feed_dict)
+            total_epoch_loss_value += mb_loss_value * adjusted_batch_size
+        return total_epoch_loss_value / n_samples
 
 
 class GAN(BaseGAN):
@@ -215,20 +215,29 @@ class GAN(BaseGAN):
         The optimizer for the generator.
     """
 
-    def train(self, X, nb_epoch, batch_size, discriminator_steps=1):
+    def train(self, X, nb_epoch, batch_size, validation_split=0.0, discriminator_steps=1):
         """Trains the GAN with X as the input data for nb_epoch number of epochs, 
         batch_size the size of the mini batch and discriminator_steps as the number 
         of discriminator gradient updates for each generator gradient update."""
-        super()._initialize_training_parameters(X, None, batch_size)
-        super()._train_gan(X, None, nb_epoch, batch_size, discriminator_steps, self.sess)
-        return self
+        X_train, y_train, X_val, y_val = split_data(X, None, validation_split)
+        super()._initialize_training_parameters(X_train, y_train, batch_size)
+        for epoch in range(nb_epoch):
+            for _ in range(discriminator_steps):
+                discriminator_loss_mixed_training_data = self._return_epoch_loss_value(X_train, y_train, batch_size, self.sess, self.discriminator_optimization, self.discriminator_loss_mixed_data, self.discriminator_placeholders, True)
+            discriminator_loss_generated_data = self._return_epoch_loss_value(X_train, y_train, batch_size, self.sess, self.generator_optimization, self.discriminator_loss_generated_data, self.generator_placeholders, True)
+            if X_val.size > 0:
+                discriminator_loss_mixed_validation_data = self._return_epoch_loss_value(X_val, y_val, batch_size, self.sess, None, self.discriminator_loss_mixed_data, self.discriminator_placeholders, False)
 
+            print('Epoch: {}\nDiscriminator loss on mixed training data: {}\nDiscriminator loss on mixed validation data: {}\nDiscriminator loss on generated data: {}\n'.format(epoch, discriminator_loss_mixed_training_data, discriminator_loss_mixed_validation_data, discriminator_loss_generated_data))
+        return self
+            
     def generate_samples(self, n_samples):
         """Generates n_samples from the generator."""
         input_tensor = sample_Z(n_samples, self.n_Z_features)
         logits = output_logits_tensor(input_tensor, self.generator_layers, self.generator_parameters)
         generated_samples = self.sess.run(tf.nn.sigmoid(logits))
         return generated_samples
+
 
 class CGAN(BaseGAN):
     """
@@ -256,13 +265,21 @@ class CGAN(BaseGAN):
         The optimizer for the generator.
     """
 
-    def train(self, X, y, nb_epoch, batch_size, discriminator_steps=1):
+    def train(self, X, y, nb_epoch, batch_size, validation_split=0.0, discriminator_steps=1):
         """Trains the Conditional GAN with X as the input data, y the one-hot
         encoded class labels for nb_epoch number of epochs, batch_size the size 
         of the mini batch, discriminator_steps as the number of discriminator 
         gradient updates for each generator gradient update."""
-        super()._initialize_training_parameters(X, y, batch_size)
-        super()._train_gan(X, y, nb_epoch, batch_size, discriminator_steps, self.sess)
+        X_train, y_train, X_val, y_val = split_data(X, y, validation_split)
+        super()._initialize_training_parameters(X_train, y_train, batch_size)
+        for epoch in range(nb_epoch):
+            for _ in range(discriminator_steps):
+                discriminator_loss_mixed_training_data = self._return_epoch_loss_value(X_train, y_train, batch_size, self.sess, self.discriminator_optimization, self.discriminator_loss_mixed_data, self.discriminator_placeholders, True)
+            discriminator_loss_generated_data = self._return_epoch_loss_value(X_train, y_train, batch_size, self.sess, self.generator_optimization, self.discriminator_loss_generated_data, self.generator_placeholders, True)
+            if X_val.size > 0:
+                discriminator_loss_mixed_validation_data = self._return_epoch_loss_value(X_val, y_val, batch_size, self.sess, None, self.discriminator_loss_mixed_data, self.discriminator_placeholders, False)
+
+            print('Epoch: {}\nDiscriminator loss on mixed training data: {}\nDiscriminator loss on mixed validation data: {}\nDiscriminator loss on generated data: {}\n'.format(epoch, discriminator_loss_mixed_training_data, discriminator_loss_mixed_validation_data, discriminator_loss_generated_data))
         return self
 
     def generate_samples(self, n_samples, class_label):

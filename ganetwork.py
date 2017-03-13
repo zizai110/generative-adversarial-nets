@@ -250,7 +250,7 @@ class BaseGAN:
                     random_colors = random.choices(list(mcolors.cnames.keys()), k=self.n_y_features + 1 if self.n_y_features > 1 else 3)
                     generated_color, *class_colors = random_colors
                     generated_color = np.array(n_samples * [generated_color])
-                    class_colors = np.array(class_colors)[y.argmax(axis=1) if self.n_y_features > 1 else y]
+                    class_colors = np.array(class_colors)[y.argmax(axis=1) if self.n_y_features > 1 else y.reshape(-1)]
                     colors = np.concatenate([class_colors, generated_color])
                     pl.scatter(X1, X2, c=colors)
                 pl.xlabel('Feature 1'), pl.ylabel('Feature 2')
